@@ -25,50 +25,6 @@ from .base import BaseArgConverter, ArgConverterMaps
 from ..registry import ARG_CONVERTERS
 
 
-@ARG_CONVERTERS.register_module()
-class MMDetectionArgsConverterOLD(BaseArgConverter):
-    # NB: compress_update_args_map is the same as train_update_args_map,
-    #     but without base_learning_rate and epochs
-    # TODO(LeonidBeynenson): replace the dicts by a function that returns dicts to avoid copying of code
-    compress_update_args_map = {
-        'train_ann_files': 'data.train.dataset.ann_file',
-        'train_data_roots': 'data.train.dataset.img_prefix',
-        'val_ann_files': 'data.val.ann_file',
-        'val_data_roots': 'data.val.img_prefix',
-        'resume_from': 'resume_from',
-        'load_weights': 'load_from',
-        'save_checkpoints_to': 'work_dir',
-        'batch_size': 'data.samples_per_gpu',
-    }
-    train_update_args_map = {
-        'train_ann_files': 'data.train.dataset.ann_file',
-        'train_data_roots': 'data.train.dataset.img_prefix',
-        'val_ann_files': 'data.val.ann_file',
-        'val_data_roots': 'data.val.img_prefix',
-        'resume_from': 'resume_from',
-        'load_weights': 'load_from',
-        'save_checkpoints_to': 'work_dir',
-        'batch_size': 'data.samples_per_gpu',
-        'base_learning_rate': 'optimizer.lr',
-        'epochs': 'total_epochs',
-    }
-    train_to_compress_update_args_map = {
-        'train_ann_files': 'data.train.dataset.ann_file',
-        'train_data_roots': 'data.train.dataset.img_prefix',
-        'val_ann_files': 'data.val.ann_file',
-        'val_data_roots': 'data.val.img_prefix',
-# the only difference w.r.t compress_update_args_map
-#        'resume_from': 'resume_from',
-#        'load_weights': 'load_from',
-        'save_checkpoints_to': 'work_dir',
-        'batch_size': 'data.samples_per_gpu',
-    }
-    test_update_args_map = {
-        'test_ann_files': 'data.test.ann_file',
-        'test_data_roots': 'data.test.img_prefix',
-    }
-
-
 def load_classes_from_snapshot(snapshot):
     import torch
     return torch.load(snapshot)['meta'].get('CLASSES', [])
@@ -89,77 +45,6 @@ def classes_list_to_update_config_dict(cfg, classes):
             update_config_dict['model.roi_head.mask_head.num_classes'] = num_classes
     return update_config_dict
 
-
-@ARG_CONVERTERS.register_module()
-class MMDetectionCustomClassesArgsConverterOLD(MMDetectionArgsConverterOLD):
-
-    @staticmethod
-    def _get_classes_from_annotation(annotation_file):
-        with open(annotation_file) as read_file:
-            categories = sorted(json.load(read_file)['categories'], key=lambda x: x['id'])
-        classes_from_annotation = [category_dict['name'] for category_dict in categories]
-        return classes_from_annotation
-
-    def _get_extra_train_args(self, args):
-        classes_from_args = None
-        if 'classes' in args and args['classes']:
-            classes_from_args = args['classes'].split(',')
-
-        classes_from_annotation = self._get_classes_from_annotation(args['train_ann_files'].split(',')[0])
-
-        if classes_from_args:
-            if not set(classes_from_args).issubset(set(classes_from_annotation)):
-                raise RuntimeError('Set of classes passed through CLI is not subset of classes in training dataset: '
-                                   f'{classes_from_args} vs {classes_from_annotation}')
-            classes = classes_from_args
-        else:
-            classes = classes_from_annotation
-
-        snapshot_path = None
-        if args['load_weights']:
-            snapshot_path = args['load_weights']
-        elif args['resume_from']:
-            snapshot_path = args['resume_from']
-        if snapshot_path:
-            classes_from_snapshot = load_classes_from_snapshot(snapshot_path)
-            if classes != classes_from_snapshot:
-                logging.warning('Set of classes that will be used in current training does not equal to classes stored in snapshot: '
-                                f'{classes} vs {classes_from_snapshot}')
-
-        return classes_list_to_update_config_dict(args['config'], classes)
-
-    def _get_extra_test_args(self, args):
-        classes_from_args = None
-        if 'classes' in args and args['classes']:
-            classes_from_args = args['classes'].split(',')
-
-        classes_from_snapshot = None
-        if args['load_weights'].endswith('.pth'):
-            classes_from_snapshot = load_classes_from_snapshot(args['load_weights'])
-        else:
-            with open(os.path.splitext(args['load_weights'])[0] + '.extra_params.yml') as read_file:
-                classes_from_snapshot = yaml.safe_load(read_file)['classes']
-
-        classes_from_annotation = self._get_classes_from_annotation(args['test_ann_files'].split(',')[0])
-
-        if classes_from_args:
-            if not set(classes_from_args).issubset(set(classes_from_annotation)):
-                raise RuntimeError('Set of classes passed through CLI is not subset of classes in test dataset: '
-                                   f'{classes_from_args} vs {classes_from_annotation}')
-            if classes_from_args != classes_from_snapshot:
-                raise RuntimeError('Set of classes passed through CLI does not equal to classes stored in snapshot: '
-                                   f'{classes_from_args} vs {classes_from_snapshot}')
-            classes = classes_from_args
-        else:
-            if classes_from_annotation != classes_from_snapshot:
-                raise RuntimeError('Set of classes obtained from test dataset does not equal to classes stored in snapshot: '
-                                   f'{classes_from_annotation} vs {classes_from_snapshot}')
-            classes = classes_from_annotation
-
-        return classes_list_to_update_config_dict(args['config'], classes)
-
-    def _get_extra_compress_args(self, args):
-        return self._get_extra_test_args(args)
 
 class MMDetectionArgConverterMap(ArgConverterMaps):
     @staticmethod
@@ -296,4 +181,3 @@ class MMDetectionCustomClassesArgConverterMap(MMDetectionArgConverterMap):
 class MMDetectionCustomClassesArgsConverter(BaseArgConverter):
     def __init__(self):
         super().__init__(MMDetectionCustomClassesArgConverterMap())
-

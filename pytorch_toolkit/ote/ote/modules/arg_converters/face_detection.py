@@ -19,15 +19,6 @@ from .mmdetection import MMDetectionArgConverterMap
 from ..registry import ARG_CONVERTERS
 
 
-#@ARG_CONVERTERS.register_module()
-#class MMDetectionWiderArgsConverterOLD(MMDetectionArgsConverter):
-#    def __init__(self):
-#        super(MMDetectionWiderArgsConverter, self).__init__()
-#
-#        self.test_out_args_map.update({
-#            'wider_dir': 'wider_dir'
-#        })
-
 class MMDetectionWiderArgConverterMap(MMDetectionArgConverterMap):
     def test_out_args_map(self):
         out_map = super().test_out_args_map()
